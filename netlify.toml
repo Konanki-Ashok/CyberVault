@@ -1,0 +1,10 @@
+[build]
+  base = "frontend"
+  command = "npm ci --include=dev && npm run build"
+  publish = "dist"
+
+# Let React Router handle direct links and page refreshes.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
