@@ -104,6 +104,16 @@ npm run build
 
 Open `http://localhost:5173` in your browser. Quick-login buttons on the login screen allow one-click role switching between Admin, Owner, Viewer, and Disabled accounts.
 
+### Deploying the frontend and backend separately
+
+The frontend is a static site and does not host the API. When deploying it to Netlify, deploy the backend and MongoDB separately, then set this Netlify environment variable to the backend's public API URL:
+
+```text
+VITE_API_URL=https://<your-backend-host>/api
+```
+
+Set the backend's `FRONTEND_ORIGIN` to `https://trustvavaultify.netlify.app` and `MONGODB_URI` to a reachable MongoDB deployment. Configure strong, unique `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, and `COOKIE_SECRET` values in the backend host. Redeploy the Netlify site after changing its environment variables so Vite embeds the API URL in the frontend build.
+
 ---
 
 ## Running with Docker Compose
