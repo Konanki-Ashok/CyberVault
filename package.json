@@ -1,0 +1,25 @@
+{
+  "name": "trustvault-workspace",
+  "version": "1.0.0",
+  "description": "TrustVault - Zero-Trust Secure Document Sharing Platform",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node dev-start.js",
+    "dev": "node dev-start.js",
+    "setup": "npm --prefix backend install && npm --prefix frontend install",
+    "test": "npm --prefix backend test",
+    "verify": "npm --prefix backend run verify",
+    "seed": "npm --prefix backend run seed",
+    "build:frontend": "npm --prefix frontend run build"
+  },
+  "keywords": [
+    "trustvault",
+    "zero-trust",
+    "document-sharing",
+    "security",
+    "mern"
+  ],
+  "author": "TrustVault Security Engineering",
+  "license": "ISC"
+}

@@ -1,0 +1,460 @@
+openapi: 3.0.3
+info:
+  title: TrustVault Secure Document Sharing Platform API
+  version: 1.0.0
+  description: >
+    Production-grade REST API for TrustVault — a zero-trust, secure document sharing platform
+    featuring granular ACLs, ephemeral download tickets, cryptographic hash-chained audit trails,
+    and server-side magic byte inspection.
+servers:
+  - url: http://localhost:5000/api
+    description: Local Development Server
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: access_token
+      description: HttpOnly, Secure, SameSite JWT access token cookie.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Bearer JWT access token for API clients.
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Anti-CSRF token required for state-changing requests when using cookie authentication.
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: Access denied
+    
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 651234567890abcdef123456
+        name:
+          type: string
+          example: Alice Document Owner
+        email:
+          type: string
+          example: owner@trustvault.local
+        role:
+          type: string
+          enum: [admin, owner, viewer]
+          example: owner
+        status:
+          type: string
+          enum: [active, disabled]
+          example: active
+
+    Document:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 651234567890abcdef123457
+        title:
+          type: string
+          example: Q3 Financial Audit
+        originalFilename:
+          type: string
+          example: Q3_Financial_Audit.pdf
+        mimeType:
+          type: string
+          example: application/pdf
+        size:
+          type: integer
+          example: 1048576
+        fileHash:
+          type: string
+          example: a1b2c3d4e5f6...
+        category:
+          type: string
+          example: Finance
+        tags:
+          type: array
+          items:
+            type: string
+          example: [audit, q3]
+        description:
+          type: string
+          example: Confidential balance sheet
+        myPermission:
+          type: string
+          enum: [owner, edit, read]
+          example: owner
+        createdAt:
+          type: string
+          format: date-time
+
+    AuditLog:
+      type: object
+      properties:
+        eventId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        timestamp:
+          type: string
+          format: date-time
+        actorEmail:
+          type: string
+          example: owner@trustvault.local
+        action:
+          type: string
+          example: DOC_UPLOAD
+        documentTitle:
+          type: string
+          example: Q3 Financial Audit
+        outcome:
+          type: string
+          enum: [SUCCESS, DENIED, FAILED]
+          example: SUCCESS
+        prevHash:
+          type: string
+          example: 0000000000000000000000000000000000000000000000000000000000000000
+        entryHash:
+          type: string
+          example: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+
+paths:
+  /auth/register:
+    post:
+      summary: Register account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string }
+                password: { type: string }
+                role: { type: string, enum: [owner, viewer] }
+      responses:
+        201: { description: Account created }
+        400: { description: Validation failure or duplicate email }
+
+  /auth/login:
+    post:
+      summary: Authenticate and obtain session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        200: { description: Successful login with HttpOnly session cookies }
+        401: { description: Invalid credentials }
+        403: { description: Account disabled }
+
+  /auth/logout:
+    post:
+      summary: Revoke session and sign out
+      responses:
+        200: { description: Session revoked }
+
+  /auth/me:
+    get:
+      summary: Get current authenticated user
+      responses:
+        200: { description: Current user profile }
+        401: { description: Unauthenticated }
+
+  /documents:
+    get:
+      summary: List accessible documents (filtered server-side by owner or ACL)
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        200: { description: Paginated list of authorized documents }
+    post:
+      summary: Upload document
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                title: { type: string }
+                category: { type: string }
+                tags: { type: string }
+                description: { type: string }
+      responses:
+        201: { description: Document uploaded and hash verified }
+        400: { description: File format spoofing, executable signature, or size exceeded }
+
+  /documents/{id}:
+    get:
+      summary: Get document metadata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200: { description: Document details }
+        403: { description: Access denied }
+        404: { description: Document not found }
+    patch:
+      summary: Update document metadata (Requires Owner or Edit grant)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200: { description: Metadata updated }
+        403: { description: Insufficient permissions }
+    delete:
+      summary: Delete document (Owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200: { description: Document deleted }
+        403: { description: Non-owner access denied }
+
+  /documents/{id}/tickets:
+    post:
+      summary: Create ephemeral, single-use download/preview ticket (60s TTL)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: purpose
+          in: query
+          schema: { type: string, enum: [download, preview], default: download }
+      responses:
+        200: { description: Ephemeral ticket issued }
+        403: { description: Access denied }
+
+  /documents/{id}/download:
+    get:
+      summary: Download document file stream
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: ticket
+          in: query
+          schema: { type: string }
+      responses:
+        200: { description: File binary stream }
+        403: { description: Access denied or ticket revoked }
+
+  /documents/{id}/preview:
+    get:
+      summary: Secure inline document preview
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: ticket
+          in: query
+          schema: { type: string }
+      responses:
+        200: { description: File binary stream with inline disposition }
+        403: { description: Access denied }
+
+  /documents/{id}/permissions:
+    get:
+      summary: List ACL grants
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200: { description: Document grants list }
+    post:
+      summary: Grant document access to user (Owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, permission]
+              properties:
+                email: { type: string }
+                permission: { type: string, enum: [read, edit] }
+      responses:
+        200: { description: Permission granted }
+        403: { description: Non-owner forbidden }
+
+  /documents/{id}/permissions/{targetUserId}:
+    delete:
+      summary: Revoke document access grant (Owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: targetUserId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200: { description: Access revoked immediately }
+        403: { description: Non-owner forbidden }
+
+  /admin/stats:
+    get:
+      summary: Get system metrics (Admin only)
+      responses:
+        200: { description: Aggregate counts and security metrics }
+        403: { description: Non-admin forbidden }
+
+  /admin/users:
+    get:
+      summary: List all users and active sessions count (Admin only)
+      responses:
+        200: { description: Users list }
+        403: { description: Non-admin forbidden }
+
+  /admin/users/{userId}/status:
+    patch:
+      summary: Disable or enable user account (Admin only)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, disabled] }
+      responses:
+        200: { description: Status updated, all active sessions revoked if disabled }
+
+  /admin/users/{userId}/revoke-sessions:
+    post:
+      summary: Terminate all active sessions for user (Admin only)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200: { description: Active sessions revoked }
+
+  /admin/audit:
+    get:
+      summary: Search and inspect append-only audit trail (Admin only)
+      parameters:
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: outcome
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+      responses:
+        200: { description: Paginated audit records }
+
+  /admin/audit/verify:
+    post:
+      summary: Cryptographically verify audit log hash chain (Admin only)
+      responses:
+        200: { description: Integrity verification results }
+
+  /ai/documents/{id}/recommendations:
+    post:
+      summary: Request AI recipient recommendations based on document metadata (Owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                purpose: { type: string }
+      responses:
+        200: { description: Scored recipient candidates with rationale }
+
+  /ai/documents/{id}/decisions:
+    post:
+      summary: Record owner human review decision for AI recommendation (Owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId, decision]
+              properties:
+                targetUserId: { type: string }
+                decision: { type: string, enum: [accepted, rejected] }
+                permission: { type: string, enum: [read, edit] }
+                reason: { type: string }
+      responses:
+        200: { description: Decision logged and access granted if accepted }

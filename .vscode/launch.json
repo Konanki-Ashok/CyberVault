@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "🚀 Start TrustVault (Full App)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/dev-start.js",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "restart": false
+    },
+    {
+      "name": "🧪 Run Security Integration Tests",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/node_modules/jest/bin/jest.js",
+      "args": ["--runInBand", "--detectOpenHandles", "--forceExit"],
+      "runtimeArgs": ["--experimental-vm-modules"],
+      "cwd": "${workspaceFolder}/backend",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "🔍 Run Audit & Security Verification Script",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/scripts/verify-live-security.js",
+      "cwd": "${workspaceFolder}/backend",
+      "console": "integratedTerminal"
+    }
+  ]
+}
